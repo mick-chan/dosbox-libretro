@@ -89,6 +89,21 @@ struct InputItem
     }
 };
 
+template<typename T>
+struct TurboInputItem
+{
+    TurboInputItem() {}
+
+    void process(const T& aItem, bool aDownNow)
+    {
+        if (aDownNow)
+        {
+            aItem.press();
+        }
+    }
+};
+
+
 struct Processable
 {
     virtual void process() = 0;
@@ -146,6 +161,40 @@ struct EmulatedMouseButton : public Processable
     void press() const   { Mouse_ButtonPressed(dosboxButton);  }
     void release() const { Mouse_ButtonReleased(dosboxButton); }
 };
+
+
+struct EmulatedMouseMovement : public Processable
+{
+    unsigned retroPort;
+    unsigned retroID;
+
+    TurboInputItem<EmulatedMouseMovement> item;
+
+    EmulatedMouseMovement(unsigned rP, unsigned rID) :
+        retroPort(rP), retroID(rID) { }
+
+    void process()
+    {
+        item.process(*this, input_cb(retroPort, RDEV(JOYPAD), 0, retroID));
+    }
+    void press() const
+    {
+        int16_t left  = input_cb(0, RDEV(JOYPAD), 0, RETRO_DEVICE_ID_JOYPAD_LEFT);
+        int16_t right = input_cb(0, RDEV(JOYPAD), 0, RETRO_DEVICE_ID_JOYPAD_RIGHT);
+        int16_t up    = input_cb(0, RDEV(JOYPAD), 0, RETRO_DEVICE_ID_JOYPAD_UP);
+        int16_t down  = input_cb(0, RDEV(JOYPAD), 0, RETRO_DEVICE_ID_JOYPAD_DOWN);
+        int16_t emulated_mouseX = right - left;
+        int16_t emulated_mouseY = down - up;
+
+        const int speed = 8;
+        emulated_mouseX = emulated_mouseX * speed;
+        emulated_mouseY = emulated_mouseY * speed;
+
+         Mouse_CursorMoved(emulated_mouseX, emulated_mouseY, 0, 0, true);
+    }
+    void release() const {}
+};
+
 
 struct JoystickButton : public Processable
 {
@@ -262,19 +311,23 @@ void MAPPER_Init()
     inputList.push_back(new MouseButton(RDID(MOUSE_RIGHT), 1));
     inputList.push_back(new MouseButton(RDID(MOUSE_MIDDLE), 2));
 
-    if (emulated_mouse)
-    {
-        inputList.push_back(new EmulatedMouseButton(0, RDID(JOYPAD_R2), 0));
-        inputList.push_back(new EmulatedMouseButton(0, RDID(JOYPAD_L2), 1));
-    }
+    // Always enable emulated_mouse
+    inputList.push_back(new EmulatedMouseButton(0, RDID(JOYPAD_B), 0));
+    inputList.push_back(new EmulatedMouseButton(0, RDID(JOYPAD_A), 1));
+    inputList.push_back(new EmulatedMouseMovement(0, RDID(JOYPAD_LEFT)));
+    inputList.push_back(new EmulatedMouseMovement(0, RDID(JOYPAD_RIGHT)));
+    inputList.push_back(new EmulatedMouseMovement(0, RDID(JOYPAD_UP)));
+    inputList.push_back(new EmulatedMouseMovement(0, RDID(JOYPAD_DOWN)));
 
     struct retro_input_descriptor desc[64];
 
     struct retro_input_descriptor desc_emulated_mouse[] = {
-        { 0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X, "Emulated Mouse X Axis" },
-        { 0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y, "Emulated Mouse Y Axis" },
-        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2, "Emulated Mouse Left Click" },
-        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2, "Emulated Mouse Right Click" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT, "D-Pad Left" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP, "D-Pad Up" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN, "D-Pad Down" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT, "D-Pad Right" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B, "Emulated Mouse Left Click" },
+        { 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A, "Emulated Mouse Right Click" },
         { 255, 255, 255, 255, "" },
     };
 
